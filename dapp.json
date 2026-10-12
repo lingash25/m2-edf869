@@ -33,6 +33,31 @@
       "name": "map.first-visit-example",
       "path": "/",
       "expectText": "Welcome to M2"
+    },
+    {
+      "name": "map.shared-link",
+      "path": "/?share=staging-demo-link",
+      "visual": true,
+      "id": "map.shared-link",
+      "impact": [
+        "public/**",
+        "styles/**",
+        "server.js",
+        "server/**",
+        "tailwind.config.js"
+      ],
+      "expectSelector": ".view-pill",
+      "expectText": "View only"
+    },
+    {
+      "name": "map.shared-link-gone",
+      "path": "/?share=not-a-real-link",
+      "expectText": "It may be private now"
+    },
+    {
+      "name": "map.demo-shared-with-you",
+      "path": "/?demo=1#/maps",
+      "expectText": "Shared with you"
     }
   ]
 }

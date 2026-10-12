@@ -1,9 +1,12 @@
 /* App shell: the hash router, the start flow and autosave.
  *
- * Routes: #/maps (Your maps), #/map/<id> (one map). With no hash the start
- * flow decides what to open: guests get the example in memory, a first visit
- * is welcomed with the example map, and anyone else reopens the map they
- * edited most recently. Every change to a map saves on its own. */
+ * Routes: #/maps (Your maps), #/map/<id> (one map). With no hash, a shared
+ * link decides first: ?share=<token> opens a map by its secret link and
+ * ?map=<id> opens one by id. Otherwise the start flow decides what to open:
+ * guests get the example in memory, a first visit is welcomed with the
+ * example map, and anyone else reopens the map they edited most recently.
+ * Every change to your own map saves on its own; a map someone shared with
+ * you opens view only. */
 (function (root) {
   'use strict';
   var M = root.M2Model;
@@ -11,6 +14,9 @@
   var isDemo = root.M2Api.isDemo;
   var app = document.getElementById('app');
   var view = null;
+  var params = new URLSearchParams(window.location.search);
+  var shareParam = params.get('share');
+  var mapParam = params.get('map');
 
   function destroyView() {
     if (view) { view.destroy(); view = null; }
@@ -98,15 +104,23 @@
   // ── One map ──────────────────────────────────────────────────────────
   var saverRef = null;
 
-  function showMap(map, guest) {
-    var saver = guest ? null : makeSaver(map.id, function (kind) { view.setStatus(kind); });
+  // mode: 'owner' edits and saves; 'viewer' reads someone else's map, view
+  // only; 'guest' plays with the example map in memory. A guest reading a
+  // shared map is a viewer withoutMaps: no Maps button, since Your maps has
+  // nothing of theirs.
+  function showMap(map, mode, withoutMaps) {
+    var owner = mode === 'owner';
+    var guest = mode === 'guest';
+    var saver = owner ? makeSaver(map.id, function (kind) { view.setStatus(kind); }) : null;
     saverRef = saver;
     var el = render(root.M2Canvas.loadingEl());
     var v = root.M2Canvas.CanvasView(el, {
       doc: map.doc,
       demo: isDemo,
+      readOnly: mode === 'viewer',
       initialStatus: guest ? 'guest' : 'none',
-      onOpenMaps: function () { location.hash = '#/maps'; },
+      onOpenMaps: withoutMaps ? null : function () { location.hash = '#/maps'; },
+      onShare: owner ? function () { root.M2ShareSheet(map.id, map.doc.nodes[0].text.trim()); } : null,
       onDeleteMap: function () {
         api('DELETE', '/api/maps/' + map.id).then(function () {
           location.hash = '#/maps';
@@ -127,19 +141,37 @@
     if (saverRef) saverRef.flushNow();
   }
 
+  // A 404 is the same for a deleted map, a private one, a reset link and
+  // a removed reader: the server never says which.
+  function mapError(err, retry) {
+    var gone = err.status === 404;
+    render(root.M2Canvas.errorEl({
+      title: gone ? 'This map isn’t available' : 'Couldn’t open this map.',
+      message: gone ? 'It may be private now, or it was deleted.' : 'Your other maps are safe.',
+      retry: gone ? null : retry,
+      back: function () { location.hash = '#/maps'; },
+    }));
+    view = { destroy: function () { app.textContent = ''; } };
+  }
+
   function openMapById(id) {
     render(root.M2Canvas.loadingEl());
-    api('GET', '/api/maps/' + id).then(function (r) {
-      showMap(r.map, false);
+    api('GET', '/api/maps/' + encodeURIComponent(id)).then(function (r) {
+      showMap(r.map, r.access === 'owner' ? 'owner' : 'viewer', false);
     }).catch(function (err) {
-      var gone = err.status === 404;
-      var el = render(root.M2Canvas.errorEl({
-        title: gone ? 'This map isn’t available' : 'Couldn’t open this map.',
-        message: gone ? 'It may have been deleted.' : 'Your other maps are safe.',
-        retry: gone ? null : function () { openMapById(id); },
-        back: function () { location.hash = '#/maps'; },
-      }));
-      view = { destroy: function () { app.textContent = ''; } };
+      mapError(err, function () { openMapById(id); });
+    });
+  }
+
+  // A secret link; guests may open these too.
+  function openShared(token) {
+    render(root.M2Canvas.loadingEl());
+    api('GET', '/api/shared/' + encodeURIComponent(token)).then(function (r) {
+      // A dead link answers { map: null } rather than a 404 (see server.js).
+      if (!r.map) { mapError({ status: 404 }); return; }
+      showMap(r.map, r.access === 'owner' ? 'owner' : 'viewer', !!r.guest);
+    }).catch(function (err) {
+      mapError(err, function () { openShared(token); });
     });
   }
 
@@ -158,12 +190,12 @@
     api('GET', '/api/maps').then(function (r) {
       if (r.guest) {
         // A visitor plays with the example map, but nothing is kept.
-        showMap({ id: 'example', doc: root.M2Example.exampleDoc() }, true);
+        showMap({ id: 'example', doc: root.M2Example.exampleDoc() }, 'guest', false);
         return;
       }
       if (!r.welcomed && !r.demo) {
         api('POST', '/api/welcome').then(function (w) {
-          if (w.map) showMap(w.map, false);
+          if (w.map) showMap(w.map, 'owner', false);
           else if (r.maps.length) openMapById(r.maps[0].id);
           else location.hash = '#/maps';
         }).catch(function () { startError(); });
@@ -205,6 +237,8 @@
     var hash = location.hash;
     if (hash === '#/maps') { showMaps(); }
     else if (hash.indexOf('#/map/') === 0) { openMapById(decodeURIComponent(hash.slice(6))); }
+    else if (shareParam) { openShared(shareParam); }
+    else if (mapParam) { openMapById(mapParam); }
     else { startFlow(); }
   }
 

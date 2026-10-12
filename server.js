@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 // UMD, so the browser loads it as window.M2Model and the server requires it.
 const M2Model = require('./public/js/map-model');
 const { exampleDoc } = require('./public/js/example-map');
-const { demoMaps } = require('./server/demo-maps');
+const { demoMaps, sharedDemoDoc } = require('./server/demo-maps');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -122,7 +122,12 @@ app.use((req, res, next) => {
       });
       // `pur` names what the token is for. Only user-identity tokens
       // authenticate a person here.
-      if (claims && claims.pur === 'iframe') req.user = claims;
+      if (claims && claims.pur === 'iframe') {
+        req.user = claims;
+        // Kept for the platform calls made on this person's behalf (the
+        // member list), which authenticate with their own token.
+        req.userToken = token;
+      }
     } catch {}
   }
   if (!req.user && token && GUEST_PUBLIC_KEY && GUEST_AUDIENCE) {
@@ -162,7 +167,8 @@ app.get('/health', (_req, res) => {
 
 // ── M2's API ─────────────────────────────────────────────────────────────
 // Maps are personal notes, so every table here is staging:private and every
-// route reads and writes only the signed-in person's own rows.
+// write touches only the signed-in person's own rows. A map's owner may let
+// others READ it (see "Sharing" below); nobody but the owner ever writes.
 
 async function bootSchema() {
   await pool.query(`
@@ -181,10 +187,46 @@ async function bootSchema() {
     COMMENT ON TABLE maps IS 'staging:private';
     COMMENT ON TABLE profiles IS 'staging:private';
     COMMENT ON TABLE demo_seeds IS 'staging:private';
+
+    -- Who can open a map besides its owner. NULL and 'private' are both
+    -- Private, so every map made before sharing existed stays private.
+    -- share_token is set only while visibility is 'link'.
+    ALTER TABLE maps ADD COLUMN IF NOT EXISTS visibility text
+      CHECK (visibility IN ('private', 'link', 'public'));
+    ALTER TABLE maps ADD COLUMN IF NOT EXISTS share_token text;
+    CREATE UNIQUE INDEX IF NOT EXISTS maps_share_token ON maps (share_token)
+      WHERE share_token IS NOT NULL;
+    -- The project members a map's owner added; each reads it whatever its
+    -- visibility. username comes from the platform's member list, shared_by
+    -- is the owner's username when they added the row.
+    CREATE TABLE IF NOT EXISTS map_readers (
+      map_id     text NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+      user_id    text NOT NULL,
+      username   text NOT NULL,
+      shared_by  text NOT NULL,
+      added_at   timestamptz NOT NULL,
+      PRIMARY KEY (map_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS map_readers_user ON map_readers (user_id);
+    COMMENT ON TABLE map_readers IS 'staging:private';
   `);
+  if (IS_STAGING) {
+    // A fixed "Anyone with the link" map owned by a fake person, so the
+    // shared-link check has an address that always works. Staging only.
+    const doc = sharedDemoDoc();
+    await pool.query(
+      `INSERT INTO maps (id, owner_id, title, doc, idea_count, created_at, updated_at, visibility, share_token)
+       VALUES ('demo-shared-link', $1, $2, $3, $4, now(), now(), 'link', 'staging-demo-link')
+       ON CONFLICT (id) DO NOTHING`,
+      [DEMO_FRIEND, doc.nodes[0].text, JSON.stringify(doc), doc.nodes.length]
+    );
+  }
 }
 
 const MAP_COLUMNS = 'id, title, doc, idea_count, created_at, updated_at';
+
+// The made-up person who owns the staging demo's shared maps.
+const DEMO_FRIEND = 'staging-demo-friend';
 
 function mapSummary(row) {
   return {
@@ -261,14 +303,39 @@ app.get('/api/maps', async (req, res) => {
           client.release();
         }
       }
+      // One fake person's map shared with the viewer, so "Shared with you"
+      // has a row. Idempotent, so it is safe on every ?demo=1 load; the
+      // viewer's own demo maps stay Private.
+      const shared = sharedDemoDoc();
+      const sharedId = 'demo-sharedwith-' + ownerId;
+      await pool.query(
+        `INSERT INTO maps (id, owner_id, title, doc, idea_count, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $6) ON CONFLICT (id) DO NOTHING`,
+        [sharedId, DEMO_FRIEND, shared.nodes[0].text, JSON.stringify(shared),
+          shared.nodes.length, new Date(req.now.getTime() - 3 * 86400000)]
+      );
+      await pool.query(
+        `INSERT INTO map_readers (map_id, user_id, username, shared_by, added_at)
+         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (map_id, user_id) DO NOTHING`,
+        [sharedId, ownerId, String(req.user.username || ''), DEMO_FRIEND, req.now]
+      );
     }
     const rows = await pool.query(
       `SELECT ${MAP_COLUMNS} FROM maps WHERE owner_id = $1 ORDER BY updated_at DESC`,
       [ownerId]
     );
+    // Maps other people added this person to, never their own.
+    const shared = await pool.query(
+      `SELECT m.id, m.title, m.doc, m.idea_count, m.created_at, m.updated_at, r.shared_by
+       FROM map_readers r JOIN maps m ON m.id = r.map_id
+       WHERE r.user_id = $1 AND m.owner_id <> $1
+       ORDER BY m.updated_at DESC`,
+      [ownerId]
+    );
     const welcomed = await pool.query('SELECT 1 FROM profiles WHERE user_id = $1', [ownerId]);
     return res.json({
       maps: rows.rows.map(mapSummary),
+      shared: shared.rows.map(row => Object.assign(mapSummary(row), { sharedBy: row.shared_by })),
       welcomed: welcomed.rowCount > 0,
       demo,
     });
@@ -332,14 +399,23 @@ app.post('/api/maps', async (req, res) => {
   }
 });
 
+// Opening a map: its owner, anyone signed in when it is Public, and the
+// people its owner added. Everyone else, guests included, gets the same 404
+// as a map that doesn't exist, so the answer never says that it does.
+// Guests reach a map only through its secret link (/api/shared/:token).
 app.get('/api/maps/:id', async (req, res) => {
   try {
+    if (!req.user) return res.status(404).json({ error: 'Map not found' });
+    const userId = String(req.user.id);
     const row = await pool.query(
-      `SELECT ${MAP_COLUMNS} FROM maps WHERE id = $1 AND owner_id = $2`,
-      [req.params.id, String(req.user.id)]
+      `SELECT ${MAP_COLUMNS}, owner_id FROM maps m
+       WHERE id = $1 AND (owner_id = $2 OR visibility = 'public'
+         OR EXISTS (SELECT 1 FROM map_readers r WHERE r.map_id = m.id AND r.user_id = $2))`,
+      [req.params.id, userId]
     );
     if (!row.rowCount) return res.status(404).json({ error: 'Map not found' });
-    return res.json({ map: mapFull(row.rows[0]) });
+    const access = row.rows[0].owner_id === userId ? 'owner' : 'viewer';
+    return res.json({ map: mapFull(row.rows[0]), access });
   } catch (err) {
     console.error('GET /api/maps/:id failed: ' + err.message);
     return res.status(500).json({ error: 'Could not open the map' });
@@ -376,6 +452,230 @@ app.delete('/api/maps/:id', async (req, res) => {
   } catch (err) {
     console.error('DELETE /api/maps/:id failed: ' + err.message);
     return res.status(500).json({ error: 'Could not delete the map' });
+  }
+});
+
+// ── Sharing ──────────────────────────────────────────────────────────────
+// A map is Private (NULL or 'private': its owner and the people they add),
+// 'link' (anyone holding its secret link, guests included) or 'public'
+// (anyone signed in who has its link). Everyone but the owner reads it view
+// only: PUT and DELETE above still filter on owner_id. A viewer's responses
+// carry mapFull only; the token and the reader list come only from the
+// owner-only routes below.
+
+const VISIBILITIES = ['private', 'link', 'public'];
+
+// 18 random bytes: 24 URL-safe characters nobody can guess.
+function newShareToken() {
+  return crypto.randomBytes(18).toString('base64url');
+}
+
+// The map when the caller owns it, otherwise null, which every owner-only
+// route answers with the same 404 as a missing map.
+async function ownedMap(id, userId) {
+  if (!userId) return null;
+  const row = await pool.query(
+    'SELECT id, visibility, share_token FROM maps WHERE id = $1 AND owner_id = $2',
+    [id, userId]
+  );
+  return row.rows[0] || null;
+}
+
+// The address to hand out: the secret link while visibility is 'link',
+// otherwise the map's own id, which opens only for people allowed in. It goes
+// through the platform's chromeless view, which embeds the app with the
+// visitor's token and passes the inner path on.
+function shareLink(map) {
+  const inner = map.visibility === 'link' && map.share_token
+    ? '/?share=' + map.share_token
+    : '/?map=' + encodeURIComponent(map.id);
+  if (!PLATFORM_ORIGIN) return inner;
+  return PLATFORM_ORIGIN + '/app/m2-edf869/full?path=' + encodeURIComponent(inner);
+}
+
+async function sharingOf(map) {
+  const readers = await pool.query(
+    'SELECT user_id, username FROM map_readers WHERE map_id = $1 ORDER BY added_at, username',
+    [map.id]
+  );
+  return {
+    visibility: VISIBILITIES.includes(map.visibility) ? map.visibility : 'private',
+    link: shareLink(map),
+    readers: readers.rows.map(r => ({ id: r.user_id, username: r.username })),
+  };
+}
+
+// The secret link. The only map route a guest can use, because a guest may
+// GET anything under /api/ and this one asks for nothing but the token.
+// A link that doesn't open (never existed, reset, or the map went Private or
+// Public) answers 200 { map: null }, one answer for all of them: the browser
+// logs a 404 as a console error, which would fail the dead-link check.
+app.get('/api/shared/:token', async (req, res) => {
+  try {
+    const token = req.params.token;
+    if (!token || token.length > 64) return res.json({ map: null });
+    const row = await pool.query(
+      `SELECT ${MAP_COLUMNS}, owner_id FROM maps WHERE share_token = $1 AND visibility = 'link'`,
+      [token]
+    );
+    if (!row.rowCount) return res.json({ map: null });
+    const access = req.user && row.rows[0].owner_id === String(req.user.id) ? 'owner' : 'viewer';
+    return res.json({ map: mapFull(row.rows[0]), access, guest: !req.user });
+  } catch (err) {
+    console.error('GET /api/shared/:token failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not open the map' });
+  }
+});
+
+app.get('/api/maps/:id/sharing', async (req, res) => {
+  try {
+    const map = await ownedMap(req.params.id, req.user ? String(req.user.id) : null);
+    if (!map) return res.status(404).json({ error: 'Map not found' });
+    return res.json(await sharingOf(map));
+  } catch (err) {
+    console.error('GET /api/maps/:id/sharing failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not load who can open the map' });
+  }
+});
+
+// A switch to 'link' mints a token unless one exists; any other value
+// drops it, so the old secret link stops working at once.
+app.put('/api/maps/:id/sharing', async (req, res) => {
+  try {
+    const visibility = req.body && req.body.visibility;
+    if (!VISIBILITIES.includes(visibility)) {
+      return res.status(400).json({ error: 'Choose private, link or public' });
+    }
+    const updated = await pool.query(
+      `UPDATE maps SET visibility = $3,
+         share_token = CASE WHEN $3 = 'link' THEN COALESCE(share_token, $4) ELSE NULL END
+       WHERE id = $1 AND owner_id = $2 RETURNING id, visibility, share_token`,
+      [req.params.id, String(req.user.id), visibility, newShareToken()]
+    );
+    if (!updated.rowCount) return res.status(404).json({ error: 'Map not found' });
+    return res.json(await sharingOf(updated.rows[0]));
+  } catch (err) {
+    console.error('PUT /api/maps/:id/sharing failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not change who can open the map' });
+  }
+});
+
+// Reset link: a new secret, so the old one stops working.
+app.post('/api/maps/:id/sharing/link', async (req, res) => {
+  try {
+    const userId = String(req.user.id);
+    const updated = await pool.query(
+      `UPDATE maps SET share_token = $3
+       WHERE id = $1 AND owner_id = $2 AND visibility = 'link'
+       RETURNING id, visibility, share_token`,
+      [req.params.id, userId, newShareToken()]
+    );
+    if (updated.rowCount) return res.json(await sharingOf(updated.rows[0]));
+    if (!(await ownedMap(req.params.id, userId))) return res.status(404).json({ error: 'Map not found' });
+    return res.status(409).json({ error: 'Only a map shared by link has a link to reset' });
+  } catch (err) {
+    console.error('POST /api/maps/:id/sharing/link failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not reset the link' });
+  }
+});
+
+// ── Project members ──────────────────────────────────────────────────────
+// The people a map can be shared with are this project's members, as the
+// platform lists them (GET /members, "Members" in the platform
+// conventions). The platform answers only members, with the caller's own
+// token, so the list is cached per caller: one person's answer is never
+// served to someone the platform would refuse. A minute's cache keeps the
+// sheet and the reader check well inside the 120-a-minute limit.
+const PLATFORM_API_BASE = (process.env.USERNODE_PLATFORM_API_V1_URL
+  || process.env.USERNODE_PLATFORM_API_URL || '').replace(/\/+$/, '');
+const MEMBERS_TTL_MS = 60_000;
+const membersCache = new Map(); // caller id -> { at, members }
+
+// { available, members: [{ id, username }] }, the caller included. Throws
+// when the platform can't be reached or answers with an error.
+async function projectMembers(req) {
+  const callerId = String(req.user.id);
+  const hit = membersCache.get(callerId);
+  if (hit && Date.now() - hit.at < MEMBERS_TTL_MS) return { available: true, members: hit.members };
+  if (!PLATFORM_API_BASE || !req.userToken) return { available: false, members: [] };
+  const headers = { 'x-usernode-user-token': req.userToken };
+  if (process.env.USERNODE_LLM_PROXY_TOKEN) {
+    headers['x-usernode-app-token'] = process.env.USERNODE_LLM_PROXY_TOKEN;
+  }
+  const resp = await fetch(PLATFORM_API_BASE + '/members?limit=200', {
+    headers, signal: AbortSignal.timeout(8000),
+  });
+  // Not a member (or an admin or check runner looking in): no roster.
+  if (resp.status === 403) return { available: false, members: [] };
+  if (!resp.ok) throw new Error('members answered ' + resp.status);
+  const body = await resp.json();
+  const members = (Array.isArray(body && body.members) ? body.members : [])
+    .filter(m => m && m.id != null && m.username)
+    .map(m => ({ id: String(m.id), username: String(m.username) }));
+  const now = Date.now();
+  for (const [key, entry] of membersCache) {
+    if (now - entry.at >= MEMBERS_TTL_MS) membersCache.delete(key);
+  }
+  membersCache.set(callerId, { at: now, members });
+  return { available: true, members };
+}
+
+app.get('/api/members', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'account_required' });
+  try {
+    const list = await projectMembers(req);
+    const me = String(req.user.id);
+    return res.json({
+      available: list.available,
+      members: list.members.filter(m => m.id !== me),
+    });
+  } catch (err) {
+    console.warn('GET /api/members failed: ' + err.message);
+    return res.status(502).json({ error: 'Could not load the project members' });
+  }
+});
+
+app.post('/api/maps/:id/readers', async (req, res) => {
+  try {
+    const ownerId = String(req.user.id);
+    const map = await ownedMap(req.params.id, ownerId);
+    if (!map) return res.status(404).json({ error: 'Map not found' });
+    const raw = req.body && req.body.userId;
+    const userId = typeof raw === 'string' || typeof raw === 'number' ? String(raw) : '';
+    if (!userId) return res.status(400).json({ error: 'Choose someone to add' });
+    if (userId === ownerId) return res.status(400).json({ error: 'This is already your map' });
+    let list;
+    try {
+      list = await projectMembers(req);
+    } catch (err) {
+      console.warn('POST /api/maps/:id/readers members failed: ' + err.message);
+      return res.status(502).json({ error: 'Could not load the project members' });
+    }
+    const member = list.members.find(m => m.id === userId);
+    if (!member) return res.status(400).json({ error: 'Only project members can be added' });
+    await pool.query(
+      `INSERT INTO map_readers (map_id, user_id, username, shared_by, added_at)
+       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (map_id, user_id) DO NOTHING`,
+      [map.id, member.id, member.username, String(req.user.username || ''), req.now]
+    );
+    return res.json(await sharingOf(map));
+  } catch (err) {
+    console.error('POST /api/maps/:id/readers failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not add them' });
+  }
+});
+
+// Access ends with the row: the reader's next request is a 404.
+app.delete('/api/maps/:id/readers/:userId', async (req, res) => {
+  try {
+    const map = await ownedMap(req.params.id, String(req.user.id));
+    if (!map) return res.status(404).json({ error: 'Map not found' });
+    await pool.query('DELETE FROM map_readers WHERE map_id = $1 AND user_id = $2',
+      [map.id, req.params.userId]);
+    return res.json(await sharingOf(map));
+  } catch (err) {
+    console.error('DELETE /api/maps/:id/readers failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not remove them' });
   }
 });
 

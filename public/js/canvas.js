@@ -20,6 +20,7 @@
     pencil: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     bin: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>',
     plus: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
+    share: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
   };
 
   function el(tag, cls, text) {
@@ -93,9 +94,13 @@
     return c;
   }
 
-  // One open map on screen.
+  // One open map on screen. With opts.readOnly (someone else's map, shared
+  // with the viewer) there is no bottom bar and no editing: pan, pinch,
+  // wheel and Fit only. opts.onShare adds the Share button; without
+  // opts.onOpenMaps there is no Maps button.
   function CanvasView(container, opts) {
     var d = opts.doc;
+    var readOnly = !!opts.readOnly;
     var selectedId = null;
     var tx = 0, ty = 0, scale = 1;
     var els = new Map(); // node id -> button
@@ -107,19 +112,35 @@
     world.appendChild(svg);
     rootEl.appendChild(world);
 
-    // Top bar: Maps, the demo pill, save status and Fit.
+    // Top bar: Maps, the demo and View only pills, save status, Share and Fit.
     var topbar = el('header', 'topbar');
-    var mapsBtn = el('button', 'btn-secondary');
-    mapsBtn.type = 'button';
-    mapsBtn.appendChild(icon('grid'));
-    mapsBtn.appendChild(document.createTextNode('Maps'));
-    mapsBtn.addEventListener('click', opts.onOpenMaps);
-    topbar.appendChild(mapsBtn);
-    if (opts.demo) topbar.appendChild(el('span', 'demo-pill', 'Staging demo'));
+    if (opts.onOpenMaps) {
+      var mapsBtn = el('button', 'btn-secondary');
+      mapsBtn.type = 'button';
+      mapsBtn.appendChild(icon('grid'));
+      mapsBtn.appendChild(document.createTextNode('Maps'));
+      mapsBtn.addEventListener('click', opts.onOpenMaps);
+      topbar.appendChild(mapsBtn);
+    }
+    if (opts.demo || readOnly) {
+      var pills = el('div', 'top-pills');
+      if (opts.demo) pills.appendChild(el('span', 'demo-pill', 'Staging demo'));
+      if (readOnly) pills.appendChild(el('span', 'view-pill', 'View only'));
+      topbar.appendChild(pills);
+    }
     var topRight = el('div', 'top-right');
     var statusEl = el('span', 'save-status');
     statusEl.hidden = true;
     topRight.appendChild(statusEl);
+    if (opts.onShare) {
+      var shareBtn = el('button', 'btn-secondary');
+      shareBtn.type = 'button';
+      shareBtn.setAttribute('aria-label', 'Share');
+      shareBtn.appendChild(icon('share'));
+      shareBtn.appendChild(el('span', 'btn-label', 'Share'));
+      shareBtn.addEventListener('click', opts.onShare);
+      topRight.appendChild(shareBtn);
+    }
     var fitBtn = el('button', 'btn-secondary btn-icon');
     fitBtn.type = 'button';
     fitBtn.setAttribute('aria-label', 'Fit map to screen');
@@ -129,29 +150,38 @@
     topbar.appendChild(topRight);
     rootEl.appendChild(topbar);
 
-    // Bottom bar: the selection line, then Rename, Delete and Add idea.
-    var bar = el('div', 'bottom-bar');
-    var selLine = el('div', 'selection');
-    bar.appendChild(selLine);
-    var actions = el('div', 'actions');
-    var renameBtn = el('button', 'btn-secondary');
-    renameBtn.type = 'button';
-    renameBtn.appendChild(icon('pencil'));
-    renameBtn.appendChild(document.createTextNode('Rename'));
-    var deleteBtn = el('button', 'btn-secondary');
-    deleteBtn.type = 'button';
-    var addBtn = el('button', 'btn-primary');
-    addBtn.type = 'button';
-    addBtn.appendChild(icon('plus'));
-    addBtn.appendChild(document.createTextNode('Add idea'));
-    actions.appendChild(renameBtn);
-    actions.appendChild(deleteBtn);
-    actions.appendChild(addBtn);
-    bar.appendChild(actions);
-    rootEl.appendChild(bar);
+    // Bottom bar: the selection line, then Rename, Delete and Add idea. A
+    // read-only view has none of it.
+    var bar = null, selLine, renameBtn, deleteBtn, addBtn;
+    if (!readOnly) {
+      bar = el('div', 'bottom-bar');
+      selLine = el('div', 'selection');
+      bar.appendChild(selLine);
+      var actions = el('div', 'actions');
+      renameBtn = el('button', 'btn-secondary');
+      renameBtn.type = 'button';
+      renameBtn.appendChild(icon('pencil'));
+      renameBtn.appendChild(document.createTextNode('Rename'));
+      deleteBtn = el('button', 'btn-secondary');
+      deleteBtn.type = 'button';
+      addBtn = el('button', 'btn-primary');
+      addBtn.type = 'button';
+      addBtn.appendChild(icon('plus'));
+      addBtn.appendChild(document.createTextNode('Add idea'));
+      actions.appendChild(renameBtn);
+      actions.appendChild(deleteBtn);
+      actions.appendChild(addBtn);
+      bar.appendChild(actions);
+      rootEl.appendChild(bar);
+    }
+
+    // The bottom bar's height, for keeping the map clear of it.
+    function barHeight() {
+      return bar ? bar.offsetHeight || 100 : 0;
+    }
 
     function setStatus(kind) {
-      statusEl.hidden = kind === 'none';
+      statusEl.hidden = readOnly || kind === 'none';
       statusEl.classList.toggle('is-error', kind === 'error');
       if (kind === 'saving') { statusEl.textContent = 'Saving'; }
       else if (kind === 'saved') { statusEl.textContent = ''; statusEl.appendChild(icon('check')); statusEl.appendChild(document.createTextNode('Saved')); }
@@ -290,7 +320,7 @@
     function fit(animated) {
       var b = bounds();
       var W = rootEl.clientWidth, H = rootEl.clientHeight;
-      var barH = bar.offsetHeight || 100;
+      var barH = barHeight();
       var top = 60 + 24, bottom = H - barH - 24;
       var availW = W - 48, availH = Math.max(bottom - top, 120);
       var s = Math.min(availW / Math.max(b.w, 1), availH / Math.max(b.h, 1), 1);
@@ -306,7 +336,7 @@
     function reveal(x, y, animated) {
       var sx = x * scale + tx, sy = y * scale + ty;
       var W = rootEl.clientWidth, H = rootEl.clientHeight;
-      var barH = bar.offsetHeight || 100;
+      var barH = barHeight();
       var pad = 40, top = 60 + pad, bottom = H - barH - pad;
       var dx = 0, dy = 0;
       if (sx < pad) dx = pad - sx;
@@ -336,7 +366,8 @@
         gesture = { kind: 'pinch', baseScale: scale, baseDist: dist, baseCx: cx, baseCy: cy };
         return;
       }
-      var ideaEl = e.target.closest ? e.target.closest('.idea') : null;
+      // Read only, an idea is just more paper: dragging it pans the map.
+      var ideaEl = !readOnly && e.target.closest ? e.target.closest('.idea') : null;
       if (ideaEl) {
         gesture = { kind: 'maybe-drag', id: ideaEl.dataset.id, x: e.clientX, y: e.clientY, moved: false };
       } else {
@@ -406,7 +437,7 @@
           lastTap = { id: id, at: now };
           select(id);
         }
-      } else if (gesture.kind === 'pan' && !gesture.moved) {
+      } else if (gesture.kind === 'pan' && !gesture.moved && !readOnly) {
         select(null); // a tap on the dotted paper clears the selection
       }
       gesture = null;
@@ -453,6 +484,7 @@
     }
 
     function renderBar() {
+      if (!bar) return;
       selLine.textContent = '';
       var n = selNode();
       var full = M.ideaCount(d) >= M.MAX_NODES;
@@ -577,12 +609,16 @@
       });
     }
 
-    renameBtn.addEventListener('click', function () { openRename(); });
-    deleteBtn.addEventListener('click', openDelete);
-    addBtn.addEventListener('click', openAdd);
+    if (bar) {
+      renameBtn.addEventListener('click', function () { openRename(); });
+      deleteBtn.addEventListener('click', openDelete);
+      addBtn.addEventListener('click', openAdd);
+    }
 
     // ── Keyboard ─────────────────────────────────────────────────────────
+    // Every shortcut edits or selects, so a read-only view has none.
     rootEl.addEventListener('keydown', function (e) {
+      if (readOnly) return;
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       var focused = e.target.closest ? e.target.closest('.idea') : null;
       var focusedId = focused ? focused.dataset.id : null;
