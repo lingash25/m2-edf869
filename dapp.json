@@ -1,0 +1,10 @@
+{
+  "description": "Build modern, easy-to-use mind maps",
+  "icon": {
+    "emoji": "🧠"
+  },
+  "secrets": [],
+  "governance": {
+    "preset": "you_or_the_group"
+  }
+}
