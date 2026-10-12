@@ -1,27 +1,41 @@
 # M2
 
-> **Starter template** — this repo was scaffolded by Homeroom Social
-> Vibecoding. Everything in it is placeholder example code until the
-> app's first real feature is built.
+Build modern, easy-to-use mind maps.
 
-The scaffold is a small working demo that proves the plumbing works:
+A map is a canvas of dotted paper. It grows out from one central idea:
+each main idea gets its own colour, its branches curve outward and get
+thinner as they go, and outer ideas are text underlined in the branch's
+colour. Ideas are added, renamed, dragged and deleted; everything saves
+on its own as you work.
 
-- **Sign-in** — the server verifies the platform-issued user token
-  (an RS256 JWT) on every request, so the app already knows who is
-  using it. No accounts to build.
-- **Database** — the app has its own private Postgres database, ready
-  to store things.
-- **Styling** — Tailwind CSS, precompiled by `npm run build` during
-  image creation with either Kubernetes/Paketo or standalone Docker, in a
-  light and a dark look that follow the viewer's Homeroom theme.
+## How it is put together
 
-## Replacing the template
+- `public/js/map-model.js` is the map model, shared by the page and the
+  server (`server.js` requires it), so both validate a map the same way.
+  A map is one JSONB document: `{ v: 1, nodes: [{ id, parent, text, x, y,
+  color }] }`, exactly one root at 0,0, colour on main ideas only.
+- `public/js/canvas.js` draws and edits one map; `public/js/maps-list.js`
+  draws Your maps; `public/js/app.js` routes between them and runs the
+  autosave queue (700 ms debounce, one PUT in flight, retrying after
+  2, 5 and 10 s).
+- `server.js` keeps the API under `/api/*`: list, welcome (first visit
+  makes the example map), create, open, save, delete. Tables: `maps`,
+  `profiles`, `demo_seeds`, all `staging:private` — maps are personal
+  notes, so each person sees only their own.
+- The look lives in `styles/tailwind-input.css` (colour tokens, light and
+  dark) and `tailwind.config.js`; the design is written down in
+  `CLAUDE.md` under "## Design".
 
-To change this app, ask Homeroom bot: open the app on Homeroom, tap the
-Homeroom icon in the header, then **Suggest an improvement**, and describe
-the app you want in plain English. The template will be replaced with your
-real app. You can also run
-Claude Code against this repo directly; start with `CLAUDE.md`, which
-carries the app-specific notes and points at the platform rules.
+## Staging demo
 
-Once the real app exists, rewrite this README to describe it.
+On a staging preview, open the app with `?demo=1`: the first call to
+`GET /api/maps` seeds your account with eight made-up maps (Lisbon
+weekend, Thesis outline, …) in one idempotent transaction, once per
+viewing account. Your own edits and deletions to them stay; a reload
+seeds nothing new. Production never writes demo rows.
+
+## Brand
+
+`brand/icon.png` is the home-screen tile and `brand/featured.png` the
+featured card; see `brand/ICON.md`. The creator's sketch card is
+`design/sketch.json`, kept as it is.

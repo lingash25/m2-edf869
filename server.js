@@ -1,7 +1,14 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
+
+// The page and the server validate maps with the same code: map-model.js is
+// UMD, so the browser loads it as window.M2Model and the server requires it.
+const M2Model = require('./public/js/map-model');
+const { exampleDoc } = require('./public/js/example-map');
+const { demoMaps } = require('./server/demo-maps');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -37,7 +44,7 @@ const GUEST_PUBLIC_KEY = (process.env.USERNODE_GUEST_JWT_PUBLIC_KEY || '')
 // Everything else requires a valid platform-issued JWT.
 const PUBLIC_API_PATHS = new Set(['/health']);
 
-app.use(express.json());
+app.use(express.json({ limit: '512kb' }));
 
 // The platform's three centrally hosted files — the bridge, the native UI
 // kit and the Tailwind runtime — are reachable at these paths on this app's
@@ -145,7 +152,236 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+// /health answers 503 while shutting down, so the platform stops sending
+// traffic before the process goes away.
+let shuttingDown = false;
+app.get('/health', (_req, res) => {
+  if (shuttingDown) return res.status(503).json({ status: 'shutting-down' });
+  return res.json({ status: 'ok' });
+});
+
+// ── M2's API ─────────────────────────────────────────────────────────────
+// Maps are personal notes, so every table here is staging:private and every
+// route reads and writes only the signed-in person's own rows.
+
+async function bootSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS maps (
+      id          text PRIMARY KEY,
+      owner_id    text NOT NULL,
+      title       text NOT NULL,
+      doc         jsonb NOT NULL,
+      idea_count  integer NOT NULL,
+      created_at  timestamptz NOT NULL,
+      updated_at  timestamptz NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS maps_owner_updated ON maps (owner_id, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS profiles (user_id text PRIMARY KEY, welcomed_at timestamptz NOT NULL);
+    CREATE TABLE IF NOT EXISTS demo_seeds (user_id text PRIMARY KEY, seeded_at timestamptz NOT NULL);
+    COMMENT ON TABLE maps IS 'staging:private';
+    COMMENT ON TABLE profiles IS 'staging:private';
+    COMMENT ON TABLE demo_seeds IS 'staging:private';
+  `);
+}
+
+const MAP_COLUMNS = 'id, title, doc, idea_count, created_at, updated_at';
+
+function mapSummary(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    ideaCount: row.idea_count,
+    updatedAt: row.updated_at.toISOString(),
+    outline: M2Model.outline(row.doc),
+  };
+}
+
+function mapFull(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    doc: row.doc,
+    ideaCount: row.idea_count,
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+async function insertMap(client, ownerId, doc, now) {
+  const id = crypto.randomUUID();
+  const title = doc.nodes[0].text.trim();
+  await client.query(
+    `INSERT INTO maps (id, owner_id, title, doc, idea_count, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $6)`,
+    [id, ownerId, title, JSON.stringify(doc), doc.nodes.length, now]
+  );
+  return id;
+}
+
+// The example map arrives the same way on every route that makes one.
+function newExampleDoc() {
+  const doc = exampleDoc();
+  return doc;
+}
+
+app.get('/api/maps', async (req, res) => {
+  try {
+    if (!req.user) {
+      // Guests can look around the example map, but nothing is kept.
+      return res.json({ maps: [], guest: true, welcomed: true, demo: false });
+    }
+    const demo = IS_STAGING && req.query.demo === '1';
+    const ownerId = String(req.user.id);
+    if (demo) {
+      // The staging demo is written once per viewing account, in one
+      // transaction, so a reload changes nothing and the viewer's own edits
+      // and deletions stay. It never touches profiles, so the welcome check
+      // below is unaffected, and production never writes demo rows.
+      const seeded = await pool.query(
+        `INSERT INTO demo_seeds (user_id, seeded_at) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO NOTHING RETURNING user_id`,
+        [ownerId, req.now]
+      );
+      if (seeded.rowCount > 0) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          for (const map of demoMaps(req.now)) {
+            await client.query(
+              `INSERT INTO maps (id, owner_id, title, doc, idea_count, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`,
+              ['demo-' + ownerId + '-' + map.key, ownerId, map.title,
+                JSON.stringify(map.doc), map.doc.nodes.length, map.updatedAt, map.updatedAt]
+            );
+          }
+          await client.query('COMMIT');
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        } finally {
+          client.release();
+        }
+      }
+    }
+    const rows = await pool.query(
+      `SELECT ${MAP_COLUMNS} FROM maps WHERE owner_id = $1 ORDER BY updated_at DESC`,
+      [ownerId]
+    );
+    const welcomed = await pool.query('SELECT 1 FROM profiles WHERE user_id = $1', [ownerId]);
+    return res.json({
+      maps: rows.rows.map(mapSummary),
+      welcomed: welcomed.rowCount > 0,
+      demo,
+    });
+  } catch (err) {
+    console.error('GET /api/maps failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not load your maps' });
+  }
+});
+
+app.post('/api/welcome', async (req, res) => {
+  try {
+    const ownerId = String(req.user.id);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const inserted = await client.query(
+        `INSERT INTO profiles (user_id, welcomed_at) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO NOTHING RETURNING user_id`,
+        [ownerId, req.now]
+      );
+      let map = null;
+      if (inserted.rowCount > 0) {
+        // Only a first visit makes the example map; coming back never does.
+        const id = await insertMap(client, ownerId, newExampleDoc(), req.now);
+        const row = await client.query(`SELECT ${MAP_COLUMNS} FROM maps WHERE id = $1`, [id]);
+        map = mapFull(row.rows[0]);
+      }
+      await client.query('COMMIT');
+      return res.json({ map });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('POST /api/welcome failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not set up your first map' });
+  }
+});
+
+app.post('/api/maps', async (req, res) => {
+  try {
+    const ownerId = String(req.user.id);
+    let doc;
+    if (req.body && req.body.from === 'example') {
+      doc = newExampleDoc();
+    } else {
+      const title = typeof (req.body && req.body.title) === 'string' ? req.body.title.trim() : '';
+      if (!title || title.length > M2Model.MAX_ROOT_TEXT) {
+        return res.status(400).json({ error: 'Give the map a name of up to 80 characters' });
+      }
+      doc = { v: 1, nodes: [{ id: 'root', parent: null, text: title, x: 0, y: 0 }] };
+    }
+    const id = await insertMap(pool, ownerId, doc, req.now);
+    const row = await pool.query(`SELECT ${MAP_COLUMNS} FROM maps WHERE id = $1 AND owner_id = $2`, [id, ownerId]);
+    return res.json({ map: mapFull(row.rows[0]) });
+  } catch (err) {
+    console.error('POST /api/maps failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not create the map' });
+  }
+});
+
+app.get('/api/maps/:id', async (req, res) => {
+  try {
+    const row = await pool.query(
+      `SELECT ${MAP_COLUMNS} FROM maps WHERE id = $1 AND owner_id = $2`,
+      [req.params.id, String(req.user.id)]
+    );
+    if (!row.rowCount) return res.status(404).json({ error: 'Map not found' });
+    return res.json({ map: mapFull(row.rows[0]) });
+  } catch (err) {
+    console.error('GET /api/maps/:id failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not open the map' });
+  }
+});
+
+app.put('/api/maps/:id', async (req, res) => {
+  try {
+    const doc = req.body && req.body.doc;
+    const why = M2Model.validate(doc);
+    if (why) return res.status(400).json({ error: why });
+    const updated = await pool.query(
+      `UPDATE maps SET doc = $3, title = $4, idea_count = $5, updated_at = $6
+       WHERE id = $1 AND owner_id = $2 RETURNING updated_at`,
+      [req.params.id, String(req.user.id), JSON.stringify(doc), doc.nodes[0].text.trim(),
+        doc.nodes.length, req.now]
+    );
+    if (!updated.rowCount) return res.status(404).json({ error: 'Map not found' });
+    return res.json({ updatedAt: updated.rows[0].updated_at.toISOString() });
+  } catch (err) {
+    console.error('PUT /api/maps/:id failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not save the map' });
+  }
+});
+
+app.delete('/api/maps/:id', async (req, res) => {
+  try {
+    const deleted = await pool.query(
+      'DELETE FROM maps WHERE id = $1 AND owner_id = $2',
+      [req.params.id, String(req.user.id)]
+    );
+    if (!deleted.rowCount) return res.status(404).json({ error: 'Map not found' });
+    return res.status(204).end();
+  } catch (err) {
+    console.error('DELETE /api/maps/:id failed: ' + err.message);
+    return res.status(500).json({ error: 'Could not delete the map' });
+  }
+});
+
+// Unknown API paths answer JSON, never the HTML shell.
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
 
 // The template ships no favicon file; index.html carries an inline SVG
 // icon instead. Answer 204 here so anything that still probes
@@ -192,9 +428,27 @@ app.get('*', (req, res) => {
 });
 
 async function start() {
+  await bootSchema();
   const server = app.listen(port, () => console.log(`Listening on :${port}`));
   // Let Envoy retire idle upstream connections at 60s, with a 15s margin.
   server.keepAliveTimeout = 75_000;
+
+  // Stop accepting connections, let the requests in flight finish (at most
+  // 3 s), close the pool, then exit. SIGTERM and SIGINT both land here, and
+  // the guard keeps the second signal from running it twice.
+  const DRAIN_MS = 3000;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    server.close();
+    if (server.closeIdleConnections) server.closeIdleConnections();
+    setTimeout(() => {
+      if (server.closeAllConnections) server.closeAllConnections();
+    }, DRAIN_MS).unref();
+    pool.end().then(() => process.exit(0)).catch(() => process.exit(0));
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 start().catch(err => { console.error(err); process.exit(1); });

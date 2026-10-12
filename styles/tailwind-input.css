@@ -13,46 +13,52 @@
 @tailwind utilities;
 
 /* ── Colour tokens ────────────────────────────────────────────────────────
- * This app's palette, defined once. Each value is "R G B"; tailwind.config.js
- * names them (bg-ground, bg-surface, text-fg, text-muted, border-line,
- * bg-accent with text-on-accent, ...). :root is the light look, and .dark,
- * which the theme script in public/index.html sets on <html>, the dark one.
- *
- * Re-theme the app HERE: change the values, keep the names. The defaults
- * (warm greys, one teal accent) are a quiet starting point, not a look.
- * Keep every text pair at 4.5:1 or more in both looks: fg and muted on
- * ground, surface and raised; accent and danger on ground and surface;
- * on-accent on accent; on-danger on danger.
- *
- * Adopting the native UI kit later? Point its --un-accent and
- * --un-accent-contrast at the accent and on-accent tokens.
+ * M2's palette: a pen and coloured markers on clean paper. The neutrals are
+ * cool and slightly blue, like a sheet of paper under daylight, and the
+ * action colour is ink, because the branch colours carry the screen.
+ * Branch colours are lines and outlines only, never text, so idea text is
+ * always fg on ground or surface. Each value is "R G B"; :root is the light
+ * look, .dark the dark one (the central pill turns light there, like chalk
+ * on a blackboard). Keep every text pair at 4.5:1 or more in both looks.
  */
 @layer base {
   :root {
-    --ground: 250 250 249;    /* the page */
-    --surface: 255 255 255;   /* lists, cards, fields */
-    --raised: 245 245 244;    /* hovers, badges */
-    --fg: 28 25 23;           /* text */
-    --muted: 87 83 78;        /* secondary text */
-    --line: 231 229 228;      /* borders, dividers, skeletons */
-    --accent: 15 118 110;     /* the one accent */
-    --on-accent: 255 255 255; /* text on the accent */
-    --danger: 185 28 28;
+    --ground: 244 246 248;       /* the canvas and pages */
+    --surface: 255 255 255;      /* main idea pills, bottom bar, lists */
+    --raised: 234 238 243;       /* thumbnails, the Staging demo pill, hovers */
+    --fg: 22 27 38;              /* text */
+    --muted: 84 93 110;          /* secondary text */
+    --line: 216 222 230;         /* borders, dividers */
+    --dots: 197 205 216;         /* the canvas dot grid */
+    --accent: 27 33 48;          /* ink: central pill, Add idea, New map */
+    --on-accent: 255 255 255;
+    --danger: 190 18 60;         /* Not saved, delete confirmations */
     --on-danger: 255 255 255;
-    --focus: 13 148 136;      /* the keyboard focus ring */
+    --focus: 59 91 219;          /* selection ring, keyboard focus */
+    --branch-teal: 13 148 136;   /* first main branch */
+    --branch-amber: 217 119 6;   /* second */
+    --branch-violet: 124 58 237; /* third */
+    --branch-rose: 225 29 72;    /* fourth */
+    --branch-sky: 2 132 199;     /* fifth */
   }
   .dark {
-    --ground: 12 10 9;
-    --surface: 28 25 23;
-    --raised: 41 37 36;
-    --fg: 245 245 244;
-    --muted: 168 162 158;
-    --line: 68 64 60;
-    --accent: 45 212 191;
-    --on-accent: 4 47 46;
-    --danger: 248 113 113;
-    --on-danger: 69 10 10;
-    --focus: 94 234 212;
+    --ground: 16 19 26;
+    --surface: 26 30 40;
+    --raised: 36 41 54;
+    --fg: 236 239 244;
+    --muted: 160 169 184;
+    --line: 52 59 75;
+    --dots: 50 57 72;
+    --accent: 236 239 244;       /* the central pill turns light, like chalk */
+    --on-accent: 16 19 26;
+    --danger: 251 113 133;
+    --on-danger: 60 8 20;
+    --focus: 129 160 255;
+    --branch-teal: 45 212 191;
+    --branch-amber: 251 191 36;
+    --branch-violet: 167 139 250;
+    --branch-rose: 251 113 133;
+    --branch-sky: 56 189 248;
   }
   /* el.hidden = true hides an element even when a class gives it a display
      (flex, the components below). */
@@ -62,9 +68,7 @@
 }
 
 /* ── Components ───────────────────────────────────────────────────────────
- * A small starting kit on the tokens. Use these rather than restyling the
- * same thing by hand, add to them sparingly, and change a component here
- * rather than one copy of it. Type: text-title, text-heading, text-body and
+ * A small kit on the tokens. Type: text-title, text-heading, text-body and
  * text-small (tailwind.config.js), nothing in between.
  */
 @layer components {
@@ -72,7 +76,7 @@
      each way, so they are easy to tap. */
   .btn-primary,
   .btn-secondary {
-    @apply inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-4 text-body font-medium
+    @apply inline-flex min-h-11 min-w-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-body font-medium
       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2
       focus-visible:ring-offset-ground disabled:cursor-not-allowed disabled:opacity-50;
   }
@@ -82,17 +86,19 @@
   .btn-secondary {
     @apply border border-line bg-surface text-fg hover:bg-raised;
   }
+  .btn-icon {
+    @apply px-0;
+  }
 
   /* Text inputs, selects and textareas: <input class="field">, 44 px tall.
-     The placeholder is a faint hint (muted at 60%), so an example such as
-     "5.0" never reads as a value somebody already typed in. */
+     The placeholder is a faint hint, so an example such as "e.g. Book a
+     table" never reads as a value somebody already typed in. */
   .field {
     @apply block min-h-11 w-full rounded-lg border border-line bg-surface px-3 py-2 text-body text-fg
       placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-focus;
   }
 
-  /* A grouped list: <ul class="list"> of <li class="list-row">. The usual
-     way to show several things; prefer it to a stack of cards. */
+  /* A grouped list: <ul class="list"> of <li class="list-row">. */
   .list {
     @apply divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface;
   }
@@ -100,8 +106,7 @@
     @apply flex min-h-11 items-center gap-3 px-4 py-3;
   }
 
-  /* A card: one self-contained thing, usually something you tap. Most
-     screens need none. Never put a card inside a card or a .list. */
+  /* A card: one self-contained thing, usually something you tap. */
   .card {
     @apply rounded-xl border border-line bg-surface p-4;
   }
@@ -111,18 +116,314 @@
     @apply mb-2 px-1 text-small font-medium text-muted;
   }
 
-  /* The states of anything that loads data. Show exactly one at a time:
-     - loading: .skeleton shapes where the data will be, never a blank;
-     - empty, only when the load WORKED and found nothing: a title, one
-       sentence and the action that fills it;
-     - error, only when the load FAILED: what failed, what still works,
-       and a Retry button.
-     Never show the empty state while loading or for a failure. */
+  /* The states of anything that loads data. Show exactly one at a time. */
   .skeleton {
     @apply rounded-md bg-line motion-safe:animate-pulse;
   }
   .state-empty,
   .state-error {
     @apply flex flex-col items-center gap-2 px-4 py-8 text-center;
+  }
+
+  /* ── The canvas ── */
+  /* Dotted paper: a faint dot grid that pans with the map (background-position
+     is moved by the pan) and never scales. */
+  .canvas {
+    position: relative;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    touch-action: none;
+    background-color: rgb(var(--ground));
+    background-image: radial-gradient(rgb(var(--dots)) 1.2px, transparent 1.5px);
+    background-size: 22px 22px;
+  }
+  .world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    transform-origin: 0 0;
+  }
+  .world.glide {
+    transition: transform 220ms ease-out;
+  }
+  .branches {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    fill: none;
+    stroke-linecap: round;
+    pointer-events: none; /* gestures belong to the canvas, never the ink */
+  }
+  /* Branch thickness by level: thick near the centre, thinner further out. */
+  .w1 { stroke-width: 7; }
+  .w2 { stroke-width: 3; }
+  .w3 { stroke-width: 2; }
+
+  /* Ideas: three tiers — the ink pill, the outlined pill, underlined text. */
+  .idea {
+    position: absolute;
+    width: max-content; /* shrink-wrap: the world div is 0 wide on purpose */
+    max-width: 236px;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    color: rgb(var(--fg));
+    text-align: left;
+  }
+  .idea:focus-visible {
+    outline: 2px solid rgb(var(--focus));
+    outline-offset: 3px;
+  }
+  .idea-central,
+  .idea-main {
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .idea-central {
+    background: rgb(var(--accent));
+    color: rgb(var(--on-accent));
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    padding: 12px 22px;
+  }
+  .idea-main {
+    background: rgb(var(--surface));
+    border: 2px solid;
+    padding: 5px 14px;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 600;
+  }
+  .idea-sub {
+    transform: translate(0, -50%);
+    font-size: 14px;
+    line-height: 20px;
+    padding: 0 2px 2px;
+    border-bottom: 3px solid;
+  }
+  .idea-sub.left {
+    transform: translate(-100%, -50%);
+  }
+  /* Ideas wrap only past about 220 px, so short ones stay on one line. */
+  .idea {
+    white-space: normal;
+    word-break: break-word;
+  }
+  .idea.is-selected {
+    outline: 2px solid rgb(var(--focus));
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  .idea-central.is-selected,
+  .idea-main.is-selected {
+    border-radius: 999px;
+  }
+  /* A new idea grows out of its parent (answers the action only). */
+  @keyframes idea-in {
+    from { opacity: 0; scale: 0.6; }
+    to { opacity: 1; scale: 1; }
+  }
+  .idea-in {
+    animation: idea-in 160ms ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .idea-in { animation: none; }
+    .world.glide { transition: none; }
+  }
+
+  /* One colour per branch, from the centre to its tips. Whole literal class
+     names, so Tailwind sees them. */
+  .c-teal { stroke: rgb(var(--branch-teal)); border-color: rgb(var(--branch-teal)); }
+  .c-amber { stroke: rgb(var(--branch-amber)); border-color: rgb(var(--branch-amber)); }
+  .c-violet { stroke: rgb(var(--branch-violet)); border-color: rgb(var(--branch-violet)); }
+  .c-rose { stroke: rgb(var(--branch-rose)); border-color: rgb(var(--branch-rose)); }
+  .c-sky { stroke: rgb(var(--branch-sky)); border-color: rgb(var(--branch-sky)); }
+  .b-teal { background: rgb(var(--branch-teal)); }
+  .b-amber { background: rgb(var(--branch-amber)); }
+  .b-violet { background: rgb(var(--branch-violet)); }
+  .b-rose { background: rgb(var(--branch-rose)); }
+  .b-sky { background: rgb(var(--branch-sky)); }
+
+  /* Line icons, one stroke width for every action. */
+  .icon {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex: none;
+  }
+
+  /* The floating top bar over the canvas. */
+  .topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    z-index: 20;
+  }
+  .topbar .btn-secondary {
+    box-shadow: 0 1px 2px rgb(var(--fg) / 0.06);
+  }
+  .demo-pill {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+    color: rgb(var(--muted));
+    background: rgb(var(--raised));
+    border-radius: 999px;
+    padding: 4px 10px;
+    flex: none;
+  }
+  .top-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .save-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    line-height: 20px;
+    color: rgb(var(--muted));
+    padding: 0 4px;
+    flex: none;
+  }
+  .save-status .icon {
+    width: 16px;
+    height: 16px;
+  }
+  .save-status.is-error {
+    color: rgb(var(--danger));
+  }
+
+  /* The bottom bar: a white sheet with rounded top corners, floating and
+     centred on a wide screen. */
+  .bottom-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgb(var(--surface));
+    border-top: 1px solid rgb(var(--line));
+    border-radius: 20px 20px 0 0;
+    padding: 14px 16px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px) + 20px);
+    z-index: 20;
+  }
+  @media (min-width: 768px) {
+    .bottom-bar {
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%);
+      bottom: 16px;
+      width: 560px;
+      max-width: calc(100vw - 32px);
+      border: 1px solid rgb(var(--line));
+      border-radius: 20px;
+      box-shadow: 0 8px 24px rgb(var(--fg) / 0.08);
+    }
+  }
+  .selection {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    min-height: 24px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    flex: none;
+  }
+  .sel-name {
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sel-meta {
+    font-size: 14px;
+    line-height: 20px;
+    color: rgb(var(--muted));
+    flex: none;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+  .actions .btn-primary {
+    flex: 1;
+  }
+
+  /* A map thumbnail on Your maps: the same drawing in miniature. */
+  .thumb {
+    width: 64px;
+    height: 48px;
+    border-radius: 10px;
+    background: rgb(var(--raised));
+    flex: none;
+  }
+  .thumb path {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+  }
+  .thumb .hub {
+    fill: rgb(var(--accent));
+    stroke: none;
+  }
+
+  /* The loading placeholder on the canvas: a pale pill in the middle. */
+  .load-pill {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 180px;
+    height: 52px;
+    border-radius: 999px;
+    background: rgb(var(--line) / 0.5);
+    animation: pulse-soft 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .load-pill { animation: none; }
+  }
+  .canvas-state {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    transform: translate(-50%, -50%);
+    max-width: 300px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    z-index: 10;
   }
 }

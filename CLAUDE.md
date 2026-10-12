@@ -97,29 +97,45 @@ tables you've marked private), etc.
 
 ## About M2
 
-Build modern, easy-to-use mind maps
-
-_(add a sentence or two more of product context here so Claude Code has a
-shared understanding of what this app is for)_
+Build modern, easy-to-use mind maps. M2 is for thinking on paper: a map
+grows out from one central idea, each main idea gets its own colour, and
+its branches curve outward and thin as they go. Maps are personal notes —
+nothing is shared or collaborative — and they save on their own as you
+work. The canvas is the app: everything else (Your maps, the sheets, the
+save status) stays out of its way.
 
 ## Design
 
-This app's look. The first real version fills in the blanks; every later
-change follows it, and updates it when a request changes the look on purpose.
+This app's look. The first real version set it; every later change
+follows it, and updates it when a request changes the look on purpose.
 
-- **Palette:** _(name the accent, any second colour and the neutrals, e.g.
-  "accent: tomato red; second: basil green; neutrals: warm greys")_
-- **Signature element:** _(the one thing on screen drawn from this app's
-  subject, which no other app would have)_
-- **Type scale:** `text-title`, `text-heading`, `text-body`, `text-small`
-  _(change their sizes in `tailwind.config.js` if you must, not their number)_
-- **One fixed look:** _(only for an app drawn as its own scene, such as a
-  game: which look, and why. Otherwise delete this line.)_
+- **Palette:** a pen and coloured markers on clean paper. Neutrals are
+  cool and slightly blue, like paper under daylight (ground `244 246 248`
+  light / `16 19 26` dark, surface white / `26 30 40`, cool grey line and
+  muted). The action colour is ink (`27 33 48` / `236 239 244`): the
+  central pill and the one primary button on each screen. Branch colours,
+  lines and outlines only, never text: teal, amber, violet, rose, sky —
+  `--branch-teal` … `--branch-sky`, brighter in the dark look. Danger is
+  berry red, focus is cobalt.
+- **Signature element:** the hand-drawn feel of a classic mind map in
+  clean vector shapes — colour-coded branches that curve out of the centre
+  and thin at each level (about 7, 3, then 2 world px), each outer branch
+  ending by underlining its idea. One branch keeps one colour centre to
+  tips. The same drawing recurs in miniature as each map's thumbnail, in
+  the app mark, the home-screen icon and the featured card (`brand/`).
+- **Type scale:** `text-title` 28/36 bold, `text-heading` 20/28 semibold,
+  `text-body` 16/24, `text-small` 14/20, one friendly rounded system face
+  (`ui-rounded`, falling back to the system sans) for everything.
+- The canvas keeps both looks: ink pill in light, chalk-light pill on
+  dark ground, branch colours brightened, dot grid dimmed. No theme
+  picker; the viewer's Homeroom setting is the control.
 
 The kit is in `styles/tailwind-input.css`: colour tokens with a light and
-a dark value (named in `tailwind.config.js`), and a few components
+a dark value (named in `tailwind.config.js`), and components
 (`btn-primary`, `btn-secondary`, `field`, `list` and `list-row`,
-`card`, `section-label`, `skeleton`, `state-empty`, `state-error`).
+`card`, `section-label`, `skeleton`, `state-empty`, `state-error`, plus
+the canvas pieces: `.canvas`, `.world`, `.idea*`, `.c-*`/`.b-*`, `.topbar`,
+`.bottom-bar`, `.thumb`, `.icon`).
 Re-theme by changing the token values there, keeping every text pair at
 4.5:1 or more in both looks.
 
@@ -134,11 +150,20 @@ Re-theme by changing the token values there, keeping every text pair at
   Never show the empty state while loading or after a failure; an error says
   what failed, what still works, and offers Retry.
 - Seed obviously fake staging demo data so the populated screen can be seen
-  ("Staging mock data" in the platform conventions).
+  ("Staging mock data" in the platform conventions). M2's demo is the eight
+  maps `server/demo-maps.js` seeds behind `?demo=1`.
 - No cards in cards, no uppercase eyebrows, no emoji as icons.
 
 ## App-specific conventions
 
-_(optional — e.g. "all currency values stored as integer cents, not
-floats"; "the `posts` table is append-only"; "avoid adding new
-dependencies"; etc.)_
+- A map is one JSONB document (`{ v: 1, nodes: [...] }`), validated by
+  `public/js/map-model.js` on both sides — the page and `server.js`
+  require the same file, so never fork the validation.
+- The map's title mirrors its root idea's text; `maps.title` exists so
+  Your maps can sort and label without opening every doc.
+- `maps`, `profiles` and `demo_seeds` are `staging:private`: maps are
+  personal notes, and every route reads and writes only the signed-in
+  person's rows. Guests get the example map in memory, never stored.
+- Idea anchors are world pixels: the centre of a pill, the near end of an
+  outer idea's underline. Keep placement rules in the model, not the view.
+- Avoid adding new dependencies; express, pg and jsonwebtoken cover it.
