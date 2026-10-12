@@ -203,7 +203,9 @@
       joinItem = menuItem('link', 'Join');
       deleteItem = menuItem('bin', 'Delete', 'is-danger');
       joinItem.btn.title = 'Join with another idea';
-      rootEl.appendChild(menu);
+      // Right after the world in the DOM, so Tab reaches it after the ideas
+      // and before the bars.
+      rootEl.insertBefore(menu, world.nextSibling);
     }
 
     // The bottom bar's height, for keeping the map clear of it.
@@ -398,6 +400,11 @@
       var mw = menu.offsetWidth, mh = menu.offsetHeight;
       var left = box.x * scale + tx, top = box.y * scale + ty;
       var w = box.w * scale, h = box.h * scale;
+      // An idea panned out of view takes its menu with it: it would point
+      // at nothing. Not the hidden attribute, which renderMenu owns.
+      var away = left + w < 0 || left > W || top + h < 60 || top > H - barHeight();
+      menu.style.visibility = away ? 'hidden' : '';
+      if (away) return;
       var x = Math.min(Math.max(left + w / 2 - mw / 2, 8), Math.max(W - mw - 8, 8));
       var y = top - mh - 10;
       var below = top + h + 10;
@@ -407,6 +414,8 @@
 
     function glide(on) {
       world.classList.toggle('glide', !!on && !reducedMotion);
+      // The menu moves with the same easing, so it stays on its idea.
+      if (menu) menu.classList.toggle('glide', !!on && !reducedMotion);
     }
 
     function screenToWorld(px, py) {

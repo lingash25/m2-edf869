@@ -514,6 +514,11 @@
   .idea-menu[hidden] {
     display: none;
   }
+  /* Eases with the world after Fit or Add idea, so it stays on its idea
+     (canvas.js never adds it under reduced motion). */
+  .idea-menu.glide {
+    transition: transform 220ms ease-out;
+  }
   .menu-btn {
     position: relative;
     display: inline-flex;
