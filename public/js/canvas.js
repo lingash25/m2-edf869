@@ -294,24 +294,28 @@
       M.links(d).forEach(function (l) {
         var seg = linkSegment(l);
         var b = linkEls.get(l.id);
-        if (seg) {
-          paths += '<path class="link-line" d="M' + seg[0] + ' ' + seg[1] + 'L' + seg[2] + ' ' + seg[3] + '"/>';
+        if (seg && seg.line) {
+          var ln = seg.line;
+          paths += '<path class="link-line" d="M' + ln[0] + ' ' + ln[1] + 'L' + ln[2] + ' ' + ln[3] + '"/>';
         }
-        if (b) {
-          b.hidden = !seg;
-          if (seg) {
-            b.style.left = (seg[0] + seg[2]) / 2 + 'px';
-            b.style.top = (seg[1] + seg[3]) / 2 + 'px';
-          }
+        // The label stays even when the line cannot be drawn, lifted over
+        // the overlapping ideas, so the link can always be tapped to rename
+        // or delete it.
+        if (b && seg) {
+          b.style.left = seg.mid[0] + 'px';
+          b.style.top = seg.mid[1] + 'px';
+          b.classList.toggle('is-over', !seg.line);
         }
       });
       svg.innerHTML = paths; // coordinates and class names only, never user text
     }
 
     // The straight line between two linked ideas, from where it leaves one
-    // box to where it meets the other, 4 px short of each: [x1, y1, x2, y2]
-    // rounded to 0.1 px, or null when the boxes overlap and there is no gap
-    // to draw in.
+    // box to where it meets the other, 4 px short of each, and where its
+    // label goes: { line: [x1, y1, x2, y2] rounded to 0.1 px, mid: [x, y] }.
+    // When the boxes overlap there is no gap to draw in: line is null and
+    // the label sits midway between the two box centres. Null before the
+    // ideas are drawn.
     function linkSegment(l) {
       var a = M.node(d, l.from), z = M.node(d, l.to);
       var ba = a && boxOf(a), bz = z && boxOf(z);
@@ -326,9 +330,10 @@
         return Math.min(ex, ey);
       }
       var t0 = exit(ba), t1 = 1 - exit(bz);
-      if (!(t0 < t1)) return null;
       var r = function (v) { return Math.round(v * 10) / 10; };
-      return [r(ax + dx * t0), r(ay + dy * t0), r(ax + dx * t1), r(ay + dy * t1)];
+      if (!(t0 < t1)) return { line: null, mid: [r((ax + zx) / 2), r((ay + zy) / 2)] };
+      var line = [r(ax + dx * t0), r(ay + dy * t0), r(ax + dx * t1), r(ay + dy * t1)];
+      return { line: line, mid: [(line[0] + line[2]) / 2, (line[1] + line[3]) / 2] };
     }
 
     // ── View transforms ──────────────────────────────────────────────────

@@ -365,7 +365,9 @@
       var key = l.from < l.to ? l.from + '\n' + l.to : l.to + '\n' + l.from;
       if (has.call(pairs, key)) return 'duplicate link';
       pairs[key] = true;
-      if (typeof l.text !== 'string' || l.text.trim().length > MAX_LINK_TEXT) return 'bad link text';
+      // The raw length: the page always stores a trimmed name, so padding
+      // around a short word is no way past the limit.
+      if (typeof l.text !== 'string' || l.text.length > MAX_LINK_TEXT) return 'bad link text';
     }
     return null;
   }
