@@ -1,10 +1,38 @@
 {
   "description": "Build modern, easy-to-use mind maps",
   "icon": {
+    "image": "brand/icon.png",
     "emoji": "🧠"
   },
   "secrets": [],
   "governance": {
     "preset": "you_or_the_group"
-  }
+  },
+  "tests": [
+    {
+      "name": "map.demo",
+      "path": "/?demo=1",
+      "visual": true,
+      "id": "map.demo",
+      "impact": [
+        "public/**",
+        "styles/**",
+        "server.js",
+        "server/**",
+        "tailwind.config.js"
+      ],
+      "expectSelector": ".idea-central",
+      "expectText": "Lisbon weekend"
+    },
+    {
+      "name": "map.demo-maps-list",
+      "path": "/?demo=1#/maps",
+      "expectText": "Staging demo maps"
+    },
+    {
+      "name": "map.first-visit-example",
+      "path": "/",
+      "expectText": "Welcome to M2"
+    }
+  ]
 }

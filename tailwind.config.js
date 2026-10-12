@@ -50,13 +50,24 @@ module.exports = {
         fg: token('fg'), // text
         muted: token('muted'), // secondary text
         line: token('line'), // borders, dividers, skeletons
-        accent: token('accent'), // the one accent: the primary action
+        dots: token('dots'), // the canvas dot grid
+        accent: token('accent'), // ink: the primary action and central pill
         'on-accent': token('on-accent'), // text on the accent
         danger: token('danger'),
         'on-danger': token('on-danger'),
         focus: token('focus'), // the keyboard focus ring
+        'branch-teal': token('branch-teal'), // main branch colours, in the
+        'branch-amber': token('branch-amber'), // order new branches get them
+        'branch-violet': token('branch-violet'),
+        'branch-rose': token('branch-rose'),
+        'branch-sky': token('branch-sky'),
       },
       // The type scale: four sizes, and nothing in between.
+      fontFamily: {
+        // One friendly rounded system face for everything, falling back to
+        // the system sans where the platform has no rounded face.
+        sans: ['ui-rounded', '"SF Pro Rounded"', '"Segoe UI Variable Display"', 'system-ui', 'sans-serif'],
+      },
       fontSize: {
         small: ['0.875rem', { lineHeight: '1.25rem' }],
         body: ['1rem', { lineHeight: '1.5rem' }],

@@ -1,0 +1,33 @@
+/* The "Welcome to M2" example map, built with the model's own placement rules
+ * so it comes out laid out like any map a person would draw. UMD:
+ * window.M2Example, or module.exports. Used by the server's welcome route,
+ * the Add the example map button, and guest mode. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = { exampleDoc: factory(require('./map-model')) };
+  } else {
+    root.M2Example = { exampleDoc: factory(root.M2Model) };
+  }
+})(typeof self !== 'undefined' ? self : this, function (M) {
+  'use strict';
+
+  function exampleDoc() {
+    var doc = { v: 1, nodes: [{ id: 'root', parent: null, text: 'Welcome to M2', x: 0, y: 0 }] };
+    var add = function (parent, text) { return M.addIdea(doc, parent, text).id; };
+    var adding = add('root', 'Add ideas');
+    var moving = add('root', 'Move things');
+    var renaming = add('root', 'Rename');
+    var colours = add('root', 'Colours');
+    var tidy = add('root', 'Tidy up');
+    add(adding, 'Select an idea');
+    add(adding, 'Then Add idea');
+    add(moving, 'Drag any idea');
+    add(moving, 'Its ideas come along');
+    add(renaming, 'Double tap an idea');
+    add(colours, 'Each main idea gets its own');
+    add(tidy, 'Delete what you don’t need');
+    return doc;
+  }
+
+  return exampleDoc;
+});

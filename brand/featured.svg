@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="ui-rounded, 'SF Pro Rounded', 'Segoe UI Variable Display', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#34D3C3"/>
+      <stop offset="1" stop-color="#0B7D84"/>
+    </linearGradient>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="1.2" cy="1.2" r="1.2" fill="#C5CDD8"/>
+    </pattern>
+  </defs>
+
+  <!-- Paper with its dot grid -->
+  <rect width="1200" height="630" fill="#F4F6F8"/>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+
+  <!-- Left: the tile, the name, the tagline -->
+  <g>
+    <rect x="110" y="128" width="160" height="160" rx="36" fill="url(#tile)"/>
+    <g transform="translate(145 145) scale(3.75)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <circle cx="4.5" cy="5" r="2"/><circle cx="19.5" cy="5" r="2"/>
+      <circle cx="4.5" cy="19" r="2"/><circle cx="19.5" cy="19" r="2"/>
+      <path d="M9.5 10.3C7.5 9.5 7 7.5 6 6.4"/>
+      <path d="M14.5 10.3C16.5 9.5 17 7.5 18 6.4"/>
+      <path d="M9.5 13.7C7.5 14.5 7 16.5 6 17.6"/>
+      <path d="M14.5 13.7C16.5 14.5 17 16.5 18 17.6"/>
+    </g>
+    <text x="110" y="418" font-size="96" font-weight="700" fill="#1B2130">M2</text>
+    <text x="112" y="472" font-size="36" fill="#545D6E">Clear, colourful mind maps</text>
+  </g>
+
+  <!-- Right: a mind map drawn like the canvas -->
+  <g fill="none" stroke-linecap="round">
+    <!-- branches to the main ideas, thick -->
+    <path stroke="#0D9488" stroke-width="7" d="M880 310C790 310 790 140 700 140"/>
+    <path stroke="#D97706" stroke-width="7" d="M880 310C985 310 987 175 1090 175"/>
+    <path stroke="#7C3AED" stroke-width="7" d="M880 310C790 310 790 415 700 415"/>
+    <path stroke="#E11D48" stroke-width="7" d="M880 310C982 310 983 430 1085 430"/>
+    <path stroke="#0284C7" stroke-width="7" d="M880 310C875 410 885 405 890 505"/>
+    <!-- branches to the outer ideas, thinner -->
+    <path stroke="#0D9488" stroke-width="3" d="M700 140C655 140 668 95 634 95"/>
+    <path stroke="#0D9488" stroke-width="3" d="M700 140C645 140 668 192 634 192"/>
+    <path stroke="#D97706" stroke-width="3" d="M1090 175C1100 175 1098 131 1113 131"/>
+    <path stroke="#D97706" stroke-width="3" d="M1090 175C1105 175 1107 229 1122 229"/>
+    <path stroke="#7C3AED" stroke-width="3" d="M700 415C660 415 678 381 645 381"/>
+    <path stroke="#7C3AED" stroke-width="3" d="M700 415C658 415 675 467 642 467"/>
+    <path stroke="#E11D48" stroke-width="3" d="M1085 430C1096 430 1095 397 1110 397"/>
+    <path stroke="#E11D48" stroke-width="3" d="M1085 430C1104 430 1110 476 1125 476"/>
+    <path stroke="#0284C7" stroke-width="3" d="M890 505C855 505 878 571 844 571"/>
+    <path stroke="#0284C7" stroke-width="3" d="M890 505C912 505 902 571 935 571"/>
+  </g>
+
+  <!-- central idea: the ink pill -->
+  <rect x="805" y="282" width="150" height="56" rx="28" fill="#1B2130"/>
+  <text x="880" y="317" font-size="22" font-weight="600" fill="#ffffff" text-anchor="middle">Big idea</text>
+
+  <!-- main ideas: pills outlined in their branch colour -->
+  <g font-size="16" font-weight="600" fill="#1B2130" text-anchor="middle">
+    <rect x="656" y="120" width="88" height="40" rx="20" fill="#ffffff" stroke="#0D9488" stroke-width="2.5"/>
+    <text x="700" y="146">Gather</text>
+    <rect x="1046" y="155" width="88" height="40" rx="20" fill="#ffffff" stroke="#D97706" stroke-width="2.5"/>
+    <text x="1090" y="181">Shape</text>
+    <rect x="652" y="395" width="96" height="40" rx="20" fill="#ffffff" stroke="#7C3AED" stroke-width="2.5"/>
+    <text x="700" y="421">Arrange</text>
+    <rect x="1037" y="410" width="96" height="40" rx="20" fill="#ffffff" stroke="#E11D48" stroke-width="2.5"/>
+    <text x="1085" y="436">Colour</text>
+    <rect x="846" y="485" width="88" height="40" rx="20" fill="#ffffff" stroke="#0284C7" stroke-width="2.5"/>
+    <text x="890" y="511">Share</text>
+  </g>
+
+  <!-- outer ideas: text underlined in the branch colour -->
+  <g font-size="15" fill="#1B2130" text-anchor="middle">
+    <text x="608" y="88">Collect</text><path stroke="#0D9488" stroke-width="2.5" d="M582 95H634"/>
+    <text x="610" y="185">Label</text><path stroke="#0D9488" stroke-width="2.5" d="M586 192H634"/>
+    <text x="1140" y="124">Notes</text><path stroke="#D97706" stroke-width="2.5" d="M1113 131H1167"/>
+    <text x="1145" y="222">Tags</text><path stroke="#D97706" stroke-width="2.5" d="M1122 229H1168"/>
+    <text x="615" y="373">Group</text><path stroke="#7C3AED" stroke-width="2.5" d="M585 380H645"/>
+    <text x="620" y="459">Name</text><path stroke="#7C3AED" stroke-width="2.5" d="M598 466H642"/>
+    <text x="1140" y="390">Shade</text><path stroke="#E11D48" stroke-width="2.5" d="M1110 397H1170"/>
+    <text x="1145" y="468">Tint</text><path stroke="#E11D48" stroke-width="2.5" d="M1125 475H1165"/>
+    <text x="820" y="563">Send</text><path stroke="#0284C7" stroke-width="2.5" d="M796 570H844"/>
+    <text x="955" y="563">Print</text><path stroke="#0284C7" stroke-width="2.5" d="M935 570H975"/>
+  </g>
+</svg>
