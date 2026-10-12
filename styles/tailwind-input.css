@@ -196,11 +196,16 @@
     cursor: pointer;
   }
   /* The tag stays small on the paper; this widens what a finger can hit to
-     44 px tall without drawing anything. Ideas sit above it, so they win. */
+     at least 44 px each way without drawing anything. Ideas sit above it, so
+     they win, except over two overlapping ideas (.is-over below). */
   .link-label::before {
     content: '';
     position: absolute;
     inset: -12px -4px;
+    min-width: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% + 8px);
   }
   /* With its two ideas overlapping there is no line, and the label sits over
      them so it can still be tapped. */

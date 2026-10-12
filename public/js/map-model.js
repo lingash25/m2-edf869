@@ -352,7 +352,8 @@
     if (!Array.isArray(doc.links)) return 'links not a list';
     if (doc.links.length > MAX_LINKS) return 'too many links';
     var has = Object.prototype.hasOwnProperty;
-    var ids = {}, pairs = {};
+    // No prototype, so an id such as '__proto__' is counted like any other.
+    var ids = Object.create(null), pairs = Object.create(null);
     for (var i = 0; i < doc.links.length; i++) {
       var l = doc.links[i];
       if (!l || typeof l !== 'object' || Array.isArray(l)) return 'bad link';
