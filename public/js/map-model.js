@@ -11,6 +11,13 @@
   var MAX_TEXT = 120;
   var MAX_ROOT_TEXT = 80;
   var MAX_XY = 20000;
+  // How deep a map goes: the central idea is level 0, a main idea level 1,
+  // and ideas nest under them down to level 10.
+  var MAX_DEPTH = 10;
+  // The widest an idea draws before it wraps (.idea's max-width), and the
+  // room left between an idea and the ideas under it.
+  var MAX_IDEA_W = 236;
+  var CHILD_GAP = 40;
 
   // Main-idea colours, in the order new main branches get them.
   var COLORS = 5;
@@ -77,14 +84,34 @@
   // plain underlined text.
   function isPill(doc, id) { return depth(doc, id) <= 1; }
 
+  // Whether an idea can take another idea under it: not past MAX_DEPTH.
+  function canAddUnder(doc, id) {
+    var d = depth(doc, id);
+    return d >= 0 && d < MAX_DEPTH;
+  }
+
+  // An idea's drawn width, for placing what grows out of it when no page has
+  // measured it (the server's demo maps, the example map): about 8.8 px a
+  // character in a main idea's 16px pill, 7.4 px in an outer idea's 14px text,
+  // never wider than an idea draws before it wraps.
+  function estimatedWidth(doc, n) {
+    var len = n.text ? n.text.length : 0;
+    var w = isPill(doc, n.id) ? Math.ceil(len * 8.8) + 32 : Math.ceil(len * 7.4) + 4;
+    return Math.min(w, MAX_IDEA_W);
+  }
+
   function trim(t) { return typeof t === 'string' ? t.trim() : ''; }
 
   // Add an idea under parentId, placed by the same rules the canvas uses, and
   // return the new node. Under the root the side with fewer main ideas grows
-  // the next branch; anywhere else the new idea sits beside its parent.
-  function addIdea(doc, parentId, text) {
+  // the next branch; anywhere else the new idea sits beside its parent, past
+  // the end of the parent's own text so the two never overlap, however deep
+  // the map goes. `parentWidth` is the parent's drawn width when the page has
+  // measured it; without it the width is estimated from the text. Returns
+  // null past MAX_DEPTH.
+  function addIdea(doc, parentId, text, parentWidth) {
     var parent = node(doc, parentId);
-    if (!parent) return null;
+    if (!parent || !canAddUnder(doc, parentId)) return null;
     var t = trim(text);
     if (!t) return null;
     var id = newId(), x, y, color;
@@ -105,7 +132,14 @@
     } else {
       var gp = node(doc, parent.parent);
       var s = gp ? (parent.x >= gp.x ? 1 : -1) : 1;
-      var step = isPill(doc, parentId) ? 150 : 110;
+      var w = typeof parentWidth === 'number' && parentWidth > 0
+        ? parentWidth : estimatedWidth(doc, parent);
+      // A main idea's pill is centred on its anchor, so only half of it lies
+      // ahead; an outer idea's text runs from its anchor the whole way. The
+      // old fixed steps stay the minimum, so short ideas sit where they did.
+      var step = isPill(doc, parentId)
+        ? Math.max(150, Math.ceil(w / 2) + CHILD_GAP)
+        : Math.max(110, Math.ceil(w) + CHILD_GAP);
       x = parent.x + s * step;
       var kids = childrenOf(doc, parentId);
       y = kids.length ? kids[kids.length - 1].y + 50 : parent.y;
@@ -223,6 +257,7 @@
     MAX_NODES: MAX_NODES,
     MAX_TEXT: MAX_TEXT,
     MAX_ROOT_TEXT: MAX_ROOT_TEXT,
+    MAX_DEPTH: MAX_DEPTH,
     COLORS: COLORS,
     newId: newId,
     node: node,
@@ -235,6 +270,7 @@
     outline: outline,
     outlineFit: outlineFit,
     isPill: isPill,
+    canAddUnder: canAddUnder,
     addIdea: addIdea,
     rename: rename,
     moveSubtree: moveSubtree,

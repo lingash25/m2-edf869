@@ -166,4 +166,7 @@ Re-theme by changing the token values there, keeping every text pair at
   person's rows. Guests get the example map in memory, never stored.
 - Idea anchors are world pixels: the centre of a pill, the near end of an
   outer idea's underline. Keep placement rules in the model, not the view.
+- Maps nest 10 levels deep (`MAX_DEPTH`; the central idea is level 0). A
+  new idea is placed past the end of its parent's drawn width (measured on
+  the page, estimated from the text elsewhere), so deep chains never overlap.
 - Avoid adding new dependencies; express, pg and jsonwebtoken cover it.

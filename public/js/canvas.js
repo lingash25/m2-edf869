@@ -456,7 +456,8 @@
       selLine.textContent = '';
       var n = selNode();
       var full = M.ideaCount(d) >= M.MAX_NODES;
-      addBtn.disabled = full;
+      var deepest = !!n && !M.canAddUnder(d, n.id);
+      addBtn.disabled = full || deepest;
       if (full) {
         selLine.appendChild(el('span', 'sel-meta', 'This map is full (500 ideas)'));
       } else if (n) {
@@ -469,7 +470,9 @@
         }
         selLine.appendChild(dot);
         selLine.appendChild(el('span', 'sel-name', n.text));
-        selLine.appendChild(el('span', 'sel-meta', countText(n)));
+        selLine.appendChild(el('span', 'sel-meta', deepest
+          ? 'Ideas go ' + M.MAX_DEPTH + ' levels deep'
+          : countText(n)));
       } else {
         selLine.appendChild(el('span', 'sel-meta', 'Tap an idea to select it'));
       }
@@ -514,8 +517,10 @@
     function openAdd() {
       if (M.ideaCount(d) >= M.MAX_NODES) return;
       var parent = selNode() || M.node(d, 'root');
+      if (!M.canAddUnder(d, parent.id)) return;
       sheetForm('Idea', 'e.g. Book a table', '', 'Add idea', M.MAX_TEXT, function (text) {
-        var n = M.addIdea(d, parent.id, text);
+        // The parent's measured width, so the new idea clears its text.
+        var n = M.addIdea(d, parent.id, text, widthOf(parent));
         if (!n) return;
         render();
         var b = els.get(n.id);
