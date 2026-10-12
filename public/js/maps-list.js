@@ -1,6 +1,7 @@
 /* Your maps: every saved map with a small drawing of its branches, how many
- * ideas it holds and when it was last edited, newest first. Loads its own
- * data, so it shows honest loading, empty and error states. */
+ * ideas it holds and when it was last edited, newest first, then "Shared
+ * with you", the maps other people added you to. Loads its own data, so it
+ * shows honest loading, empty and error states. */
 (function (root) {
   'use strict';
   var M = root.M2Model;
@@ -78,6 +79,7 @@
     container.textContent = '';
     container.appendChild(wrap);
     var listData = null;
+    var sharedData = [];
     var guest = false;
     var demo = !!opts.demo;
     var swipeHandles = [];
@@ -138,6 +140,7 @@
       newEmpty.addEventListener('click', openNew);
       state.appendChild(newEmpty);
       body.appendChild(state);
+      renderShared();
     }
 
     function confirmDelete(map) {
@@ -200,6 +203,46 @@
       });
     }
 
+    // One map's row: the thumbnail, the name that opens it, a line under
+    // the name and when it was last edited.
+    function mapRow(map, meta) {
+      var row = el('li', 'list-row');
+      row.appendChild(thumbSvg(map.outline));
+      var textCol = el('div');
+      textCol.style.cssText = 'flex:1;min-width:0';
+      var nameBtn = el('button');
+      nameBtn.type = 'button';
+      nameBtn.style.cssText = 'display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer';
+      var name = el('p', 'text-body font-semibold', map.title);
+      name.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      nameBtn.appendChild(name);
+      nameBtn.setAttribute('aria-label', 'Open ' + map.title);
+      nameBtn.addEventListener('click', function () { opts.onOpen(map.id); });
+      textCol.appendChild(nameBtn);
+      textCol.appendChild(el('p', 'text-small text-muted', meta));
+      row.appendChild(textCol);
+      row.appendChild(el('span', 'text-small text-muted', relativeTime(map.updatedAt)));
+      return row;
+    }
+
+    function ideasText(map) {
+      return map.ideaCount + (map.ideaCount === 1 ? ' idea' : ' ideas');
+    }
+
+    // Maps other people shared with you, view only: no more-menu and no
+    // swipe, since only their owner can rename or delete them.
+    function renderShared() {
+      if (guest || !sharedData.length) return;
+      var label = el('h2', 'section-label', 'Shared with you');
+      label.style.marginTop = '20px';
+      body.appendChild(label);
+      var list = el('ul', 'list');
+      sharedData.forEach(function (map) {
+        list.appendChild(mapRow(map, ideasText(map) + ', shared by ' + map.sharedBy));
+      });
+      body.appendChild(list);
+    }
+
     function render() {
       swipeHandles.forEach(function (h) { h.detach(); });
       swipeHandles = [];
@@ -208,22 +251,7 @@
       if (demo) body.appendChild(el('h2', 'section-label', 'Staging demo maps'));
       var list = el('ul', 'list');
       listData.forEach(function (map) {
-        var row = el('li', 'list-row');
-        row.appendChild(thumbSvg(map.outline));
-        var textCol = el('div');
-        textCol.style.cssText = 'flex:1;min-width:0';
-        var nameBtn = el('button');
-        nameBtn.type = 'button';
-        nameBtn.style.cssText = 'display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer';
-        var name = el('p', 'text-body font-semibold', map.title);
-        name.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-        nameBtn.appendChild(name);
-        nameBtn.setAttribute('aria-label', 'Open ' + map.title);
-        nameBtn.addEventListener('click', function () { opts.onOpen(map.id); });
-        textCol.appendChild(nameBtn);
-        textCol.appendChild(el('p', 'text-small text-muted', map.ideaCount + (map.ideaCount === 1 ? ' idea' : ' ideas')));
-        row.appendChild(textCol);
-        row.appendChild(el('span', 'text-small text-muted', relativeTime(map.updatedAt)));
+        var row = mapRow(map, ideasText(map));
         if (!guest) {
           var more = el('button', 'text-muted');
           more.type = 'button';
@@ -241,6 +269,7 @@
         list.appendChild(row);
       });
       body.appendChild(list);
+      renderShared();
     }
 
     function renderFoot() {
@@ -276,6 +305,7 @@
         } else {
           listData = r.maps;
         }
+        sharedData = guest ? [] : (r.shared || []);
         newBtn.hidden = guest;
         if (listData.length === 0) setEmpty(); else render();
       }).catch(function () { setError(); });

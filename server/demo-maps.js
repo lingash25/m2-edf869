@@ -112,4 +112,14 @@ function demoMaps(now) {
   }));
 }
 
-module.exports = { demoMaps, lisbonDoc };
+// A made-up friend's map, shared with the viewer (Shared with you) and by a
+// fixed secret link (the shared-link check). Staging only.
+function sharedDemoDoc() {
+  return buildDoc('Staging demo: Book club picks', [
+    ['Novels', ['Piranesi', 'The Overstory']],
+    ['Memoirs', ['Educated']],
+    ['Next meeting', ['First Tuesday']],
+  ]);
+}
+
+module.exports = { demoMaps, lisbonDoc, sharedDemoDoc };

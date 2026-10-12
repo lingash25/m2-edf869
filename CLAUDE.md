@@ -99,9 +99,10 @@ tables you've marked private), etc.
 
 Build modern, easy-to-use mind maps. M2 is for thinking on paper: a map
 grows out from one central idea, each main idea gets its own colour, and
-its branches curve outward and thin as they go. Maps are personal notes —
-nothing is shared or collaborative — and they save on their own as you
-work. The canvas is the app: everything else (Your maps, the sheets, the
+its branches curve outward and thin as they go. Maps are personal notes,
+private by default, and they save on their own as you work. A map's owner
+can share it view only (Private plus the people they add, Anyone with the
+link, or Public); nobody but the owner ever changes it. The canvas is the app: everything else (Your maps, the sheets, the
 save status) stays out of its way.
 
 ## Design
@@ -161,9 +162,20 @@ Re-theme by changing the token values there, keeping every text pair at
   require the same file, so never fork the validation.
 - The map's title mirrors its root idea's text; `maps.title` exists so
   Your maps can sort and label without opening every doc.
-- `maps`, `profiles` and `demo_seeds` are `staging:private`: maps are
-  personal notes, and every route reads and writes only the signed-in
-  person's rows. Guests get the example map in memory, never stored.
+- `maps`, `profiles`, `demo_seeds` and `map_readers` are
+  `staging:private`: maps are personal notes. Every write route stays
+  owner-only (filtered on `owner_id`); reading someone else's map goes
+  through one access check in `GET /api/maps/:id` (Public, or a
+  `map_readers` row) or the secret link (`GET /api/shared/:token`). A map
+  someone can't open answers exactly like a missing one, never 403, and a
+  viewer's responses never carry `share_token` or the reader list. Guests
+  get the example map in memory, never stored, and open a shared map only
+  by its secret link.
+- `maps.visibility` is NULL or `'private'` (Private), `'link'` or
+  `'public'`. `share_token` exists only while it is `'link'`; switching
+  away nulls it and Reset link replaces it. People are added from the
+  platform's member list (`GET /api/members`, cached a minute per caller),
+  never from people who happened to open the app.
 - Idea anchors are world pixels: the centre of a pill, the near end of an
   outer idea's underline. Keep placement rules in the model, not the view.
 - Maps nest 10 levels deep (`MAX_DEPTH`; the central idea is level 0). A

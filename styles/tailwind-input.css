@@ -106,6 +106,32 @@
     @apply flex min-h-11 items-center gap-3 px-4 py-3;
   }
 
+  /* A radio choice in a list row (<label class="list-row"> wrapping a real
+     <input type="radio" class="choice">): a muted ring, an ink ring with a
+     dot when chosen, the focus ring from the keyboard. */
+  .choice {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    border: 2px solid rgb(var(--muted));
+    background: rgb(var(--surface));
+    flex: none;
+    margin: 0;
+    cursor: pointer;
+  }
+  .choice:checked {
+    border: 6px solid rgb(var(--accent));
+  }
+  .choice:focus-visible {
+    outline: 2px solid rgb(var(--focus));
+    outline-offset: 2px;
+  }
+  .choice:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
   /* A card: one self-contained thing, usually something you tap. */
   .card {
     @apply rounded-xl border border-line bg-surface p-4;
@@ -354,7 +380,10 @@
   .topbar .btn-secondary {
     box-shadow: 0 1px 2px rgb(var(--fg) / 0.06);
   }
-  .demo-pill {
+  /* The pale pills: "Staging demo", and "View only" on a map shared with
+     you. They give way first when a narrow top bar runs out of room. */
+  .demo-pill,
+  .view-pill {
     font-size: 14px;
     line-height: 20px;
     font-weight: 500;
@@ -362,7 +391,23 @@
     background: rgb(var(--raised));
     border-radius: 999px;
     padding: 4px 10px;
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .top-pills {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* Below 380 px the Share button keeps its icon and its aria-label only,
+     so Fit stays on screen. */
+  @media (max-width: 379px) {
+    .topbar .btn-label {
+      display: none;
+    }
   }
   .top-right {
     display: flex;
